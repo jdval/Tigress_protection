@@ -12,6 +12,7 @@ import struct
 import sys
 import time
 import lief
+import binascii
 
 from triton             import *
 from scripts.templates  import *
@@ -480,10 +481,10 @@ def emulate(ctx, pc):
 
         count += 1
 
-        #print instruction
-        #if count % 5000 == 0:
+        print hex(pc), binascii.hexlify(opcodes), instruction
+        # if count % 5000 == 0:
         #    print "(%d, %.02f)" %(count, time.clock() - startTime)
-        #if count >= 200000:
+        # if count >= 200000:
         #    sys.exit(0)
 
         if pc in totalUniqueInstructions:
@@ -492,6 +493,7 @@ def emulate(ctx, pc):
             totalUniqueInstructions[pc] = 1
 
         if instruction.getType() == OPCODE.HLT:
+            print "got halting opcode"
             break
 
         if ctx.isRegisterSymbolized(ctx.registers.rip) and len(condition) == 0:
@@ -503,6 +505,7 @@ def emulate(ctx, pc):
 
         # Next
         pc = ctx.getConcreteRegisterValue(ctx.registers.rip)
+        print "next pc %x" % pc
 
     debug('[+] Instruction executed: %d' %(count))
     debug('[+] Unique instruction executed: %d' %(len(totalUniqueInstructions)))
@@ -515,12 +518,22 @@ def emulate(ctx, pc):
 
 def loadBinary(ctx, binary):
     # Map the binary into the memory
-    phdrs = binary.segments
-    for phdr in phdrs:
-        size   = phdr.physical_size
-        vaddr  = phdr.virtual_address
-        debug('[+] Loading 0x%06x - 0x%06x' %(vaddr, vaddr+size))
-        ctx.setConcreteMemoryAreaValue(vaddr, phdr.content)
+    if isinstance(binary, lief.PE.Binary):
+        phdrs = binary.sections
+        for phdr in phdrs:
+            size = phdr.size
+            #vaddr = phdr.virtual_address *phdr.offset
+            vaddr = binary.optional_header.imagebase + phdr.virtual_address
+            debug('[+] Loading 0x%06x - 0x%06x, %s' % (vaddr, vaddr + size, phdr.name))
+            ctx.setConcreteMemoryAreaValue(vaddr, phdr.content)
+    else:
+        phdrs = binary.segments
+        for phdr in phdrs:
+            size = phdr.physical_size
+            vaddr = phdr.virtual_address
+            debug('[+] Loading 0x%06x - 0x%06x' % (vaddr, vaddr + size))
+            ctx.setConcreteMemoryAreaValue(vaddr, phdr.content)
+
     return
 
 
